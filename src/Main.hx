@@ -143,7 +143,7 @@ class Main {
 		case _ if (s.startsWith("enum.")):
 			"int";
 		case _ if (isClassType(s)):
-			stripName(s) + "*";
+			"godot_object*";
 		case _:
 			stripName(s);
 	}
