@@ -102,11 +102,29 @@ class Main {
 		var gluePrefix = "godot_";
 		var glue = [
 			['#define HL_NAME(n) ${gluePrefix}_##n', "#include <hl.h>"].join("\n"),
+			[
+				'HL_PRIM void HL_NAME(${gluePrefix}___destroy)(godot_object* obj) {',
+				'\tapi->godot_object_destroy(obj);',
+				'}'
+			].join("\n")
 		];
+
 		var printer = new haxe.macro.Printer();
 		for (cls in classes) {
 			var externClassName = stripName(cls.name);
 			var fields:Array<Field> = [];
+
+			if (cls.instanciable) {
+				var ctorMethodName = gluePrefix + externClassName + "___new";
+				glue.push([
+					'HL_PRIM godot_object* HL_NAME($ctorMethodName)() {',
+					'\tstatic godot_class_constructor ctor = NULL;',
+					'\tif (ctor == NULL)',
+					'\t\tctor = api->godot_get_class_constructor("${cls.name}");',
+					'\treturn ctor();',
+					'}'
+				].join("\n"));
+			}
 
 			for (method in cls.methods) {
 				var externMethodName = escapeIdent(method.name);
@@ -123,7 +141,7 @@ class Main {
 					glueMethodCallInstance = "__obj";
 					glueMethodPrelude = "";
 				} else {
-					glueMethodCallInstance = "__singleton_" + cls.name;
+					glueMethodCallInstance = "__singleton_" + externClassName;
 					var initMethodName = '${glueMethodCallInstance}__init';
 					glue.push('static godot_object* $glueMethodCallInstance;');
 					glue.push([
