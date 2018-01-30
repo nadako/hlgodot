@@ -79,6 +79,11 @@ class Main {
 		case _: s;
 	}
 
+	static function escapeCIdent(s:String):String return switch s {
+		case "short" | "default" | "interface" | "char" | "bool": s + "_";
+		case _: s;
+	}
+
 	static function convertType(s:String):ComplexType return switch s {
 		case "void": macro : Void;
 		case "int": macro : Int;
@@ -115,11 +120,17 @@ class Main {
 			"import GodotBase;",
 		];
 		var gluePrefix = "godot_";
+		var apiConst = "__api";
 		var glue = [
-			['#define HL_NAME(n) ${gluePrefix}_##n', "#include <hl.h>"].join("\n"),
+			[
+				'#define HL_NAME(n) ${gluePrefix}_##n',
+				"#include <hl.h>",
+				"#include <gdnative_api_struct.gen.h>",
+				"const godot_gdnative_core_api_struct* __api;",
+			].join("\n"),
 			[
 				'HL_PRIM void HL_NAME(${gluePrefix}___destroy)(godot_object* obj) {',
-				'\tapi->godot_object_destroy(obj);',
+				'\t$apiConst->godot_object_destroy(obj);',
 				'}'
 			].join("\n"),
 			"#define _GODOT_OBJECT _ABSTRACT(godot_object);",
@@ -136,11 +147,13 @@ class Main {
 					'HL_PRIM godot_object* HL_NAME($ctorMethodName)() {',
 					'\tstatic godot_class_constructor ctor = NULL;',
 					'\tif (ctor == NULL)',
-					'\t\tctor = api->godot_get_class_constructor("${cls.name}");',
+					'\t\tctor = $apiConst->godot_get_class_constructor("${cls.name}");',
 					'\treturn ctor();',
 					'}'
 				].join("\n"));
 			}
+
+			var singletonGenerated = false;
 
 			for (method in cls.methods) {
 				var externMethodName = escapeIdent(method.name);
@@ -161,14 +174,18 @@ class Main {
 				} else {
 					glueMethodCallInstance = "__singleton_" + externClassName;
 					var initMethodName = '${glueMethodCallInstance}__init';
-					glue.push('static godot_object* $glueMethodCallInstance;');
-					glue.push([
-						'inline void $initMethodName() {',
-						'\tif ($glueMethodCallInstance == NULL)',
-						'\t\t$glueMethodCallInstance = api->godot_global_get_singleton("${cls.name}")',
-						'}',
-					].join("\n"));
 					glueMethodPrelude = '\t$initMethodName();';
+
+					if (!singletonGenerated) {
+						singletonGenerated = true;
+						glue.push('static godot_object* $glueMethodCallInstance;');
+						glue.push([
+							'inline void $initMethodName() {',
+							'\tif ($glueMethodCallInstance == NULL)',
+							'\t\t$glueMethodCallInstance = $apiConst->godot_global_get_singleton("${cls.name}");',
+							'}',
+						].join("\n"));
+					}
 				}
 
 				for (arg in method.arguments) {
@@ -177,9 +194,10 @@ class Main {
 						name: externArgName,
 						type: convertType(arg.type),
 					});
+					var glueArgName = escapeCIdent(arg.name);
 					var glueArgType = convertGlueType(arg.type);
-					glueArgs.push('$glueArgType $externArgName');
-					glueArgsSetup.push('\t\t&$externArgName,');
+					glueArgs.push('$glueArgType $glueArgName');
+					glueArgsSetup.push('\t\t&$glueArgName,');
 					hlArgTypes.push(convertHlType(arg.type));
 				}
 				fields.push({
@@ -200,12 +218,15 @@ class Main {
 					glueMethodPrelude,
 					"\tstatic godot_method_bind* __mb = NULL;",
 					"\tif (__mb == NULL)",
-					'\t\t__mb = __api->godot_method_bind_get_method("${cls.name}", "${method.name}")',
-					'\tconst void* __args[${method.arguments.length}] = {',
-					glueArgsSetup.join("\n"),
-					"\t}",
+					'\t\t__mb = $apiConst->godot_method_bind_get_method("${cls.name}", "${method.name}");',
+					"\tconst void* __args" + (
+						if (method.arguments.length == 0)
+							"[1] = {0};"
+						else
+							'[] = {\n${glueArgsSetup.join("\n")}\n\t};'
+					),
 					if (glueReturnType == "void") "" else '\t$glueReturnType __ret;',
-					'\tapi->godot_method_bind_ptrcall(__mb, $glueMethodCallInstance, __args, ${if (glueReturnType == "void") "NULL" else "&__ret"});',
+					'\t$apiConst->godot_method_bind_ptrcall(__mb, $glueMethodCallInstance, __args, ${if (glueReturnType == "void") "NULL" else "&__ret"});',
 					if (glueReturnType == "void") "" else "\treturn __ret;",
 					'}'
 				].join("\n"));
@@ -258,6 +279,6 @@ class Main {
 			output.push(printer.printTypeDefinition(def));
 		}
 		sys.io.File.saveContent("Godot.hx", output.join("\n\n"));
-		sys.io.File.saveContent("godot.h", glue.join("\n\n"));
+		sys.io.File.saveContent("godot.c", glue.join("\n\n"));
 	}
 }
