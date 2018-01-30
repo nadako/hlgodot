@@ -94,9 +94,56 @@ class Main {
 			TPath({pack: [], name: stripName(s)});
 	}
 
+	static function isPrimitive(name:String):Bool
+		return switch name {
+			case "int", "bool", "real", "float", "void": true;
+			case _: false;
+		}
+
+	static function isCoreType(name:String):Bool
+		// TODO: extract this info from the hx files
+		return switch name {
+			case  "Array"
+				| "Basis"
+				| "Color"
+				| "Dictionary"
+				| "Error"
+				| "NodePath"
+				| "Plane"
+				| "PoolByteArray"
+				| "PoolIntArray"
+				| "PoolRealArray"
+				| "PoolStringArray"
+				| "PoolVector2Array"
+				| "PoolVector3Array"
+				| "PoolColorArray"
+				| "Quat"
+				| "Rect2"
+				| "AABB"
+				| "RID"
+				| "String"
+				| "Transform"
+				| "Transform2D"
+				| "Variant"
+				| "Vector2"
+				| "Vector3"
+				:
+				true;
+			case _:
+				false;
+		}
+
+	static inline function isClassType(name:String):Bool {
+		return !(isPrimitive(name) || isCoreType(name));
+	}
+
 	static function convertGlueType(s:String):String return switch s {
 		case "float":
 			"double";
+		case _ if (s.startsWith("enum.")):
+			"int";
+		case _ if (isClassType(s)):
+			stripName(s) + "*";
 		case _:
 			stripName(s);
 	}
