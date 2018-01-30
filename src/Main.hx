@@ -94,58 +94,19 @@ class Main {
 			TPath({pack: [], name: stripName(s)});
 	}
 
-	static function isPrimitive(name:String):Bool
-		return switch name {
-			case "int", "bool", "real", "float", "void": true;
-			case _: false;
-		}
-
-	static function isCoreType(name:String):Bool
-		// TODO: extract this info from the hx files
-		return switch name {
-			case  "Array"
-				| "Basis"
-				| "Color"
-				| "Dictionary"
-				| "Error"
-				| "NodePath"
-				| "Plane"
-				| "PoolByteArray"
-				| "PoolIntArray"
-				| "PoolRealArray"
-				| "PoolStringArray"
-				| "PoolVector2Array"
-				| "PoolVector3Array"
-				| "PoolColorArray"
-				| "Quat"
-				| "Rect2"
-				| "AABB"
-				| "RID"
-				| "String"
-				| "Transform"
-				| "Transform2D"
-				| "Variant"
-				| "Vector2"
-				| "Vector3"
-				:
-				true;
-			case _:
-				false;
-		}
-
-	static inline function isClassType(name:String):Bool {
-		return !(isPrimitive(name) || isCoreType(name));
+	static function convertHlType(s:String):String return switch s {
+		case "void": "_VOID";
+		case "int": "_I32";
+		case "bool": "_BOOL";
+		case "float": "_F64";
+		case _: "_GODOT_OBJECT";
 	}
 
 	static function convertGlueType(s:String):String return switch s {
-		case "float":
-			"double";
-		case _ if (s.startsWith("enum.")):
-			"int";
-		case _ if (isClassType(s)):
-			"godot_object*";
-		case _:
-			stripName(s);
+		case "void" | "int" | "bool": s;
+		case "float": "double";
+		case _ if (s.startsWith("enum.")): "int";
+		case _: "godot_object*";
 	}
 
 	static function main() {
@@ -160,7 +121,8 @@ class Main {
 				'HL_PRIM void HL_NAME(${gluePrefix}___destroy)(godot_object* obj) {',
 				'\tapi->godot_object_destroy(obj);',
 				'}'
-			].join("\n")
+			].join("\n"),
+			"#define _GODOT_OBJECT _ABSTRACT(godot_object);",
 		];
 
 		var printer = new haxe.macro.Printer();
@@ -187,11 +149,13 @@ class Main {
 
 				var glueArgs = [];
 				var glueArgsSetup = [];
+				var hlArgTypes = [];
 				var glueMethodPrelude;
 
 				var glueMethodCallInstance;
 				if (!cls.singleton) {
 					glueArgs.push("godot_object* __obj");
+					hlArgTypes.push("_GODOT_OBJECT");
 					glueMethodCallInstance = "__obj";
 					glueMethodPrelude = "";
 				} else {
@@ -216,6 +180,7 @@ class Main {
 					var glueArgType = convertGlueType(arg.type);
 					glueArgs.push('$glueArgType $externArgName');
 					glueArgsSetup.push('\t\t&$externArgName,');
+					hlArgTypes.push(convertHlType(arg.type));
 				}
 				fields.push({
 					pos: null,
@@ -244,6 +209,9 @@ class Main {
 					if (glueReturnType == "void") "" else "\treturn __ret;",
 					'}'
 				].join("\n"));
+
+				var hlReturnType = convertHlType(method.return_type);
+				glue.push('DEFINE_PRIM($hlReturnType, $glueMethodName, ${if (hlArgTypes.length == 0) "_NO_ARG" else hlArgTypes.join(" ")})');
 			}
 
 			// TODO: preserve order
