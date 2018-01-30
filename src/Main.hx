@@ -115,13 +115,24 @@ class Main {
 
 				var glueArgs = [];
 				var glueArgsSetup = [];
+				var glueMethodPrelude;
 
 				var glueMethodCallInstance;
 				if (!cls.singleton) {
 					glueArgs.push("godot_object* __obj");
 					glueMethodCallInstance = "__obj";
+					glueMethodPrelude = "";
 				} else {
 					glueMethodCallInstance = "__singleton_" + cls.name;
+					var initMethodName = '${glueMethodCallInstance}__init';
+					glue.push('static godot_object* $glueMethodCallInstance;');
+					glue.push([
+						'inline void $initMethodName() {',
+						'\tif ($glueMethodCallInstance == NULL)',
+						'\t\t$glueMethodCallInstance = api->godot_global_get_singleton("${cls.name}")',
+						'}',
+					].join("\n"));
+					glueMethodPrelude = '\t$initMethodName();';
 				}
 
 				for (arg in method.arguments) {
@@ -148,6 +159,7 @@ class Main {
 				var glueMethodName = gluePrefix + externClassName + "_" + externMethodName;
 				glue.push([
 					'HL_PRIM $glueReturnType HL_NAME($glueMethodName)(${glueArgs.join(", ")}) {',
+					glueMethodPrelude,
 					"\tstatic godot_method_bind* __mb = NULL;",
 					"\tif (__mb == NULL)",
 					'\t\t__mb = __api->godot_method_bind_get_method("${cls.name}", "${method.name}")',
