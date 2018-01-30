@@ -94,6 +94,13 @@ class Main {
 			TPath({pack: [], name: stripName(s)});
 	}
 
+	static function convertGlueType(s:String):String return switch s {
+		case "float":
+			"double";
+		case _:
+			stripName(s);
+	}
+
 	static function main() {
 		var classes:Array<GClass> = haxe.Json.parse(sys.io.File.getContent("api.json"));
 		var output = [
@@ -159,7 +166,8 @@ class Main {
 						name: externArgName,
 						type: convertType(arg.type),
 					});
-					glueArgs.push("void* " + externArgName);
+					var glueArgType = convertGlueType(arg.type);
+					glueArgs.push('$glueArgType $externArgName');
 					glueArgsSetup.push('\t\t&$externArgName,');
 				}
 				fields.push({
@@ -173,7 +181,7 @@ class Main {
 					})
 				});
 
-				var glueReturnType = method.return_type;
+				var glueReturnType = convertGlueType(method.return_type);
 				var glueMethodName = gluePrefix + externClassName + "_" + externMethodName;
 				glue.push([
 					'HL_PRIM $glueReturnType HL_NAME($glueMethodName)(${glueArgs.join(", ")}) {',
