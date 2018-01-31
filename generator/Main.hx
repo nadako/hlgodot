@@ -24,22 +24,32 @@ abstract ApiMethodArg(Array<String>) {
 	public var name(get,never):String; inline function get_name() return this[1];
 }
 
+enum CType {
+	Pointer(t:CType);
+	Name(t:String);
+}
+
 class Main {
-	static function prepareType(t:String):String {
-		if (t.startsWith("const ")) return t.substring("const ".length);
-		return t;
+	static function parseType(t:String):CType {
+		t = t.trim();
+		if (t.endsWith("*")) return Pointer(parseType(t.substring(0, t.length - 1)));
+		if (t.startsWith("const ")) return parseType(t.substring("const ".length));
+		return Name(t);
 	}
 
-	static function getType(t:String):{prim:String, ct:ComplexType} return switch prepareType(t) {
-		case "void": {prim: "_VOID", ct: macro : Void};
-		case "char *": {prim: "_BYTES", ct: macro : hl.Bytes};
-		case "godot_int" | "int": {prim: "_I32", ct: macro : Int};
-		case "godot_real": {prim: "_F32", ct: macro : Single};
-		case "godot_bool": {prim: "_BOOL", ct: macro : Bool};
-		case "int64_t": {prim: "_I64", ct: macro : hl.I64};
-		case "double": {prim: "_F64", ct: macro : Float};
-		case "wchar_t": {prim: "_I16", ct: macro : hl.UI16};
-		case _: {prim: "_VOID", ct: macro : Void}; // throw 'Unknown type `$t`';
+	static function getType(t:CType):{prim:String, ct:ComplexType} return switch t {
+		case Pointer(Name("char")): {prim: "_BYTES", ct: macro : hl.Bytes};
+		case Pointer(t): var i = getType(t), ct = i.ct; {prim: '_REF(${i.prim})', ct: macro : hl.Ref<$ct>};
+		case Name(t): switch t {
+			case "void": {prim: "_VOID", ct: macro : Void};
+			case "godot_int" | "int": {prim: "_I32", ct: macro : Int};
+			case "godot_real": {prim: "_F32", ct: macro : Single};
+			case "godot_bool": {prim: "_BOOL", ct: macro : Bool};
+			case "int64_t": {prim: "_I64", ct: macro : hl.I64};
+			case "double": {prim: "_F64", ct: macro : Float};
+			case "wchar_t": {prim: "_I16", ct: macro : hl.UI16};
+			case _: {prim: "_VOID", ct: macro : Void}; // throw 'Unknown type `$t`';
+		}
 	}
 
 	static function main() {
@@ -74,7 +84,7 @@ class Main {
 			var glueMethodArgs = [];
 			var glueCallArgs = [];
 
-			var ret = getType(method.return_type);
+			var ret = getType(parseType(method.return_type));
 			var primReturnType = ret.prim;
 			var externReturnType = ret.ct;
 			var primArgTypes = [];
@@ -83,7 +93,7 @@ class Main {
 			for (arg in method.arguments) {
 				glueMethodArgs.push('${arg.type} ${arg.name}');
 				glueCallArgs.push(arg.name);
-				var t = getType(arg.type);
+				var t = getType(parseType(arg.type));
 				primArgTypes.push(t.prim);
 				externArgs.push({name: arg.name, type: t.ct});
 			}
