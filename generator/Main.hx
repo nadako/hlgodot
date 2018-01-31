@@ -25,11 +25,21 @@ abstract ApiMethodArg(Array<String>) {
 }
 
 class Main {
-	static function getType(t:String):{prim:String, ct:ComplexType} {
-		return {
-			prim: "_VOID",
-			ct: macro : Void
-		};
+	static function prepareType(t:String):String {
+		if (t.startsWith("const ")) return t.substring("const ".length);
+		return t;
+	}
+
+	static function getType(t:String):{prim:String, ct:ComplexType} return switch prepareType(t) {
+		case "void": {prim: "_VOID", ct: macro : Void};
+		case "char *": {prim: "_BYTES", ct: macro : hl.Bytes};
+		case "godot_int" | "int": {prim: "_I32", ct: macro : Int};
+		case "godot_real": {prim: "_F32", ct: macro : Single};
+		case "godot_bool": {prim: "_BOOL", ct: macro : Bool};
+		case "int64_t": {prim: "_I64", ct: macro : hl.I64};
+		case "double": {prim: "_F64", ct: macro : Float};
+		case "wchar_t": {prim: "_I16", ct: macro : hl.UI16};
+		case _: {prim: "_VOID", ct: macro : Void}; // throw 'Unknown type `$t`';
 	}
 
 	static function main() {
