@@ -2,7 +2,7 @@ import Godot;
 
 class Main {
 	static function main() {
-		var s = Godot.string_chars_to_utf8(@:privateAccess "Hello, world".bytes);
-		Godot.print(s);
+		inline function b(s:String) return @:privateAccess s.toUtf8();
+		Godot.print_warning(b("Hi from Haxe"), b("some func"), b("some file"), 42);
 	}
 }
