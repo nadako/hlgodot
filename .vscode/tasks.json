@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Generate",
+			"type": "shell",
+			"command": "haxe --cwd generator generator.hxml",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
