@@ -1,0 +1,3 @@
+-cp ../externs
+-main Main
+-hl out/main.c
